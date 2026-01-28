@@ -56,6 +56,10 @@
               <div class="file-meta">
                 {{ file.count }} 点 
                 <span v-if="file.processedData.length" style="color: green; margin-left: 5px;">(已处理)</span>
+                <span v-if="file.report && file.report.qc_score" 
+                    :style="{color: getScoreColor(file.report.qc_score), fontWeight: 'bold', marginLeft: '5px'}">
+                    {{ file.report.qc_score }}分
+                </span>
               </div>
             </div>
             
@@ -153,7 +157,50 @@
           👈 请勾选列表中的轨迹进行查看或处理
         </div>
 
-        <el-card v-if="lastSelectedFile && lastSelectedFile.report" style="margin-top: 15px; background: #f0f9eb; border: 1px solid #c2e7b0;" shadow="hover">
+        <el-card v-if="lastSelectedFile && lastSelectedFile.report && lastSelectedFile.report.qc_summary" 
+                 style="margin-top: 15px; border: 1px solid #EBEEF5;" shadow="hover">
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <b style="font-size: 14px">📊 质量报告: {{ lastSelectedFile.name }}</b>
+              <el-tag :type="getScoreType(lastSelectedFile.report.qc_score)">
+                {{ lastSelectedFile.report.qc_score }} 分
+              </el-tag>
+            </div>
+          </template>
+          
+          <div style="font-size: 12px;">
+            <div style="margin-bottom: 10px; color: #666;">
+                异常统计 (总点数: {{ lastSelectedFile.count }})
+            </div>
+            
+            <div class="qc-item">
+                <span>⏱️ 时间间隔</span>
+                <span :class="{error: lastSelectedFile.report.qc_summary.time.count > 0}">
+                    {{ lastSelectedFile.report.qc_summary.time.count }} 处
+                </span>
+            </div>
+            <div class="qc-item">
+                <span>🔗 字段完整</span>
+                <span :class="{error: lastSelectedFile.report.qc_summary.integrity.count > 0}">
+                    {{ lastSelectedFile.report.qc_summary.integrity.count }} 处
+                </span>
+            </div>
+            <div class="qc-item">
+                <span>🚀 速度异常</span>
+                <span :class="{error: lastSelectedFile.report.qc_summary.speed.count > 0}">
+                    {{ lastSelectedFile.report.qc_summary.speed.count }} 处
+                </span>
+            </div>
+            <div class="qc-item">
+                <span>↪️ 转角异常</span>
+                <span :class="{error: lastSelectedFile.report.qc_summary.angle.count > 0}">
+                    {{ lastSelectedFile.report.qc_summary.angle.count }} 处
+                </span>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card v-else-if="lastSelectedFile && lastSelectedFile.report" style="margin-top: 15px; background: #f0f9eb; border: 1px solid #c2e7b0;" shadow="hover">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <b style="font-size: 12px">报告: {{ lastSelectedFile.name }}</b>
@@ -193,17 +240,20 @@ const selectedFileIds = ref([])
 const layerStore = ref({}) 
 const roadLayerGroup = ref(null)
 
-// 🔥🔥🔥 核心修改区：简化配置对象 🔥🔥🔥
+// 🟢 完整的配置对象
 const config = ref({
   remove_stop_points: false, 
   stop_radius: 5,            
-  stop_duration: 30,         // 新增：时间阈值 (默认30秒)
+  stop_duration: 30,         
   
   enable_kalman: true,       
   kalman_R: 0.01,            
   kalman_Q: 500.0,          
   
-  match_algo: 'HMM'
+  match_algo: 'HMM',
+  
+  // 质量检测参数 (隐式配置，如需在界面修改可加到表单里)
+  quality_weights: { time: 0.25, integrity: 0.25, speed: 0.25, angle: 0.25 }
 })
 
 // 计算属性
@@ -225,14 +275,13 @@ onMounted(async () => {
 const initMap = () => {
   map.value = L.map('map').setView([39.9, 116.4], 11)
   
-  // 方案 A：高德极简灰
+  // 高德底图
   const gaodeLayer = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
     subdomains: ['1', '2', '3', '4'],
     attribution: '© 高德地图',
     minZoom: 1,
     maxZoom: 19
   }).addTo(map.value)
-  // gaodeLayer.getContainer().style.filter = 'grayscale(100%) opacity(0.9) brightness(98%)'
 
   roadLayerGroup.value = L.layerGroup().addTo(map.value)
   addLegend()
@@ -248,6 +297,18 @@ const checkBackendStatus = async () => {
   } catch (e) {
     ElMessage.error('无法连接后端服务')
   }
+}
+
+// 🆕 辅助函数：颜色处理
+const getScoreColor = (score) => {
+    if (score >= 90) return '#67C23A'
+    if (score >= 70) return '#E6A23C'
+    return '#F56C6C'
+}
+const getScoreType = (score) => {
+    if (score >= 90) return 'success'
+    if (score >= 70) return 'warning'
+    return 'danger'
 }
 
 // --- 文件操作 ---
@@ -419,7 +480,6 @@ const drawTrajectory = (fileId, points, type, color) => {
   }
   
   let layer;
-  // 🔥 核心修改：Raw/Processed 画点，Matched 画线 🔥
   if (type === 'matched') {
     const latlngs = points.map(p => [p.lat, p.lon])
     layer = L.polyline(latlngs, {
@@ -524,5 +584,13 @@ body { margin: 0; padding: 0; }
 
 .empty-tip {
   text-align: center; color: #999; margin-top: 40px; font-size: 14px;
+}
+
+/* 🆕 质量报告面板样式 */
+.qc-item {
+    display: flex; justify-content: space-between; margin-bottom: 5px; color: #606266;
+}
+.qc-item .error {
+    color: #F56C6C; font-weight: bold;
 }
 </style>
