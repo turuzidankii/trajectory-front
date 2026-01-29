@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import TrajectorySidebar from './components/TrajectorySidebar.vue'
 import MapView from './components/MapView.vue'
@@ -53,6 +53,8 @@ const reportDialogVisible = ref(false)
 const currentReportFile = ref(null)
 const reportPage = ref(1)
 const reportPageSize = ref(50)
+const statusPollTimer = ref(null)
+const statusPollInterval = 5000
 
 // --- 核心配置 ---
 const config = ref({
@@ -77,17 +79,39 @@ onMounted(async () => {
   checkBackendStatus()
 })
 
+onUnmounted(() => {
+  if (statusPollTimer.value) {
+    clearTimeout(statusPollTimer.value)
+    statusPollTimer.value = null
+  }
+})
+
 const checkBackendStatus = async () => {
   try {
     const res = await getRoadNetworkStatus()
     if (res.data.loaded) {
       roadStatus.value = true
       nodeCount.value = res.data.nodes
+      if (statusPollTimer.value) {
+        clearTimeout(statusPollTimer.value)
+        statusPollTimer.value = null
+      }
+      return
     }
+    scheduleStatusRetry()
   } catch (e) {
     ElMessage.error('无法连接后端服务')
     console.error(e)
+    scheduleStatusRetry()
   }
+}
+
+const scheduleStatusRetry = () => {
+  if (statusPollTimer.value) return
+  statusPollTimer.value = setTimeout(async () => {
+    statusPollTimer.value = null
+    await checkBackendStatus()
+  }, statusPollInterval)
 }
 
 // --- 文件上传处理 (修改点：接收质检数据) ---
