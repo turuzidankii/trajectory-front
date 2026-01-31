@@ -19,42 +19,11 @@
       <el-main style="padding:0; position:relative;">
         <MapView ref="mapRef" />
 
-        <div v-if="timelineVisible" class="timeline-panel">
-          <div class="timeline-header">
-            <div class="timeline-title">时间轴</div>
-            <el-tag size="small" type="success" effect="light">已选 {{ timelineFiles.length }} 条</el-tag>
-          </div>
-
-          <div class="timeline-controls">
-            <el-button
-              size="small"
-              type="primary"
-              :icon="isTimelinePlaying ? 'VideoPause' : 'VideoPlay'"
-              @click="toggleTimelinePlayback"
-              :disabled="timelineMax === 0"
-            >
-              {{ isTimelinePlaying ? '暂停' : '播放' }}
-            </el-button>
-            <el-button size="small" icon="RefreshLeft" @click="resetTimeline" :disabled="timelineMax === 0">
-              重置
-            </el-button>
-          </div>
-
-          <el-slider
-            v-model="timelineIndex"
-            :min="0"
-            :max="timelineMax"
-            :step="1"
-            :show-tooltip="false"
-            class="timeline-slider"
-          />
-
-          <div class="timeline-time">
-            <span>{{ startTimeLabel }}</span>
-            <span class="timeline-current">{{ currentTimeLabel }}</span>
-            <span>{{ endTimeLabel }}</span>
-          </div>
-        </div>
+        <TimelinePanel
+          :files="selectedFiles"
+          :step-interval="timelineStepInterval"
+          @render="handleTimelineRender"
+        />
       </el-main>
     </el-container>
 
@@ -69,10 +38,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import TrajectorySidebar from './components/TrajectorySidebar.vue'
 import MapView from './components/MapView.vue'
+import TimelinePanel from './components/TimelinePanel.vue'
 import ReportDialog from './components/ReportDialog.vue'
 import { getRoadNetworkStatus, uploadTrajectory, processTrajectory, getRoadsNearby } from './api/trajectory'
 
@@ -94,9 +64,6 @@ const statusPollTimer = ref(null)
 const statusPollInterval = 5000
 
 // --- 时间轴状态 ---
-const timelineIndex = ref(0)
-const isTimelinePlaying = ref(false)
-const timelinePlayTimer = ref(null)
 const timelineStepInterval = 15
 const timelineTailLength = 10
 
@@ -118,60 +85,6 @@ const selectedFiles = computed(() => {
   return fileList.value.filter(f => selectedFileIds.value.includes(f.id))
 })
 
-const timelineFiles = computed(() =>
-  selectedFiles.value.filter(f => (f.matchedData || []).length > 0)
-)
-
-const timelineVisible = computed(() => timelineFiles.value.length > 0)
-
-const timelineGlobalTimes = computed(() => {
-  const times = []
-  timelineFiles.value.forEach((file) => {
-    file.matchedData.forEach((p, i) => {
-      times.push(normalizeTimestamp(p.timestamp, i))
-    })
-  })
-  const unique = Array.from(new Set(times))
-  unique.sort((a, b) => a - b)
-  return unique
-})
-
-const timelineMax = computed(() => Math.max(0, timelineGlobalTimes.value.length - 1))
-
-const normalizeTimestamp = (timestamp, fallbackIndex) => {
-  if (timestamp == null) return fallbackIndex
-  if (typeof timestamp === 'number') {
-    return timestamp < 1e12 ? timestamp * 1000 : timestamp
-  }
-  const parsed = Date.parse(timestamp)
-  if (!Number.isNaN(parsed)) return parsed
-  return fallbackIndex
-}
-
-const formatTimestamp = (value) => {
-  if (value == null) return '-'
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return String(value)
-    return date.toLocaleString()
-  }
-  return String(value)
-}
-
-const currentTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineGlobalTimes.value[timelineIndex.value])
-})
-
-const startTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineGlobalTimes.value[0])
-})
-
-const endTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineGlobalTimes.value[timelineGlobalTimes.value.length - 1])
-})
 
 // --- 初始化 ---
 onMounted(async () => {
@@ -183,7 +96,6 @@ onUnmounted(() => {
     clearTimeout(statusPollTimer.value)
     statusPollTimer.value = null
   }
-  stopTimelinePlayback()
 })
 
 const checkBackendStatus = async () => {
@@ -407,32 +319,15 @@ const clearSubLayers = (fileId, types) => {
   mapRef.value?.clearSubLayers(fileId, types)
 }
 
-// --- 时间轴交互 ---
-const buildMatchedTimes = (file) =>
-  file.matchedData.map((p, i) => normalizeTimestamp(p.timestamp, i))
-
-const findIndexByTime = (times, target) => {
-  if (!times.length) return 0
-  if (target <= times[0]) return 0
-  if (target >= times[times.length - 1]) return times.length - 1
-  let left = 0
-  let right = times.length - 1
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2)
-    if (times[mid] === target) return mid
-    if (times[mid] < target) left = mid + 1
-    else right = mid - 1
+// --- 时间轴渲染 ---
+const handleTimelineRender = ({ positions, removedIds }) => {
+  if (removedIds && removedIds.length) {
+    removedIds.forEach((id) => mapRef.value?.clearTimelineLayers(id))
   }
-  return Math.max(0, left - 1)
-}
-
-const updateTimelineOnMap = () => {
-  if (!timelineVisible.value || !mapRef.value) return
-  const targetTime = timelineGlobalTimes.value[timelineIndex.value]
-  timelineFiles.value.forEach((file) => {
-    const times = buildMatchedTimes(file)
-    const index = findIndexByTime(times, targetTime)
-    mapRef.value.drawMatchedTimeline(
+  if (!positions || positions.length === 0) return
+  positions.forEach(({ file, index }) => {
+    if (!file || !file.matchedData?.length) return
+    mapRef.value?.drawMatchedTimeline(
       file.id,
       file.matchedData,
       index,
@@ -440,74 +335,6 @@ const updateTimelineOnMap = () => {
     )
   })
 }
-
-const startTimelinePlayback = () => {
-  if (!timelineVisible.value || timelineMax.value === 0) return
-  if (isTimelinePlaying.value) return
-  if (timelineIndex.value >= timelineMax.value) {
-    timelineIndex.value = 0
-  }
-  isTimelinePlaying.value = true
-  timelinePlayTimer.value = setInterval(() => {
-    if (timelineIndex.value >= timelineMax.value) {
-      stopTimelinePlayback()
-    } else {
-      timelineIndex.value += 1
-    }
-  }, timelineStepInterval)
-}
-
-const stopTimelinePlayback = () => {
-  if (timelinePlayTimer.value) {
-    clearInterval(timelinePlayTimer.value)
-    timelinePlayTimer.value = null
-  }
-  isTimelinePlaying.value = false
-}
-
-const toggleTimelinePlayback = () => {
-  if (isTimelinePlaying.value) {
-    stopTimelinePlayback()
-  } else {
-    startTimelinePlayback()
-  }
-}
-
-const resetTimeline = () => {
-  stopTimelinePlayback()
-  timelineIndex.value = 0
-}
-
-watch(timelineIndex, () => {
-  updateTimelineOnMap()
-})
-
-watch(
-  () => timelineFiles.value.map(f => f.id),
-  (newIds, oldIds) => {
-    stopTimelinePlayback()
-    timelineIndex.value = 0
-    const oldSet = new Set(oldIds || [])
-    const newSet = new Set(newIds || [])
-    oldSet.forEach((id) => {
-      if (!newSet.has(id)) {
-        mapRef.value?.clearTimelineLayers(id)
-      }
-    })
-    if (timelineVisible.value) {
-      updateTimelineOnMap()
-    }
-  }
-)
-
-watch(timelineGlobalTimes, () => {
-  if (timelineIndex.value > timelineMax.value) {
-    timelineIndex.value = timelineMax.value
-  }
-  if (timelineVisible.value) {
-    updateTimelineOnMap()
-  }
-})
 </script>
 
 <style>
@@ -587,50 +414,4 @@ body { margin: 0; padding: 0; }
 .text-warning { color: #E6A23C; font-weight: bold; }
 
 /* 时间轴面板 */
-.timeline-panel {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  width: 320px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  padding: 12px 14px;
-  z-index: 500;
-}
-
-.timeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.timeline-title {
-  font-weight: bold;
-  color: #333;
-}
-
-.timeline-controls {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.timeline-slider {
-  margin: 8px 0 6px;
-}
-
-.timeline-time {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #666;
-  gap: 8px;
-}
-
-.timeline-current {
-  color: #00C853;
-  font-weight: bold;
-}
 </style>
