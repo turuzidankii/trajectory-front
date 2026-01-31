@@ -22,7 +22,7 @@
         <div v-if="timelineVisible" class="timeline-panel">
           <div class="timeline-header">
             <div class="timeline-title">时间轴</div>
-            <el-tag size="small" type="success" effect="light">{{ timelineFile.name }}</el-tag>
+            <el-tag size="small" type="success" effect="light">已选 {{ timelineFiles.length }} 条</el-tag>
           </div>
 
           <div class="timeline-controls">
@@ -118,15 +118,25 @@ const selectedFiles = computed(() => {
   return fileList.value.filter(f => selectedFileIds.value.includes(f.id))
 })
 
-const timelineFile = computed(() => {
-  return selectedFiles.value.find(f => (f.matchedData || []).length > 0) || null
+const timelineFiles = computed(() =>
+  selectedFiles.value.filter(f => (f.matchedData || []).length > 0)
+)
+
+const timelineVisible = computed(() => timelineFiles.value.length > 0)
+
+const timelineGlobalTimes = computed(() => {
+  const times = []
+  timelineFiles.value.forEach((file) => {
+    file.matchedData.forEach((p, i) => {
+      times.push(normalizeTimestamp(p.timestamp, i))
+    })
+  })
+  const unique = Array.from(new Set(times))
+  unique.sort((a, b) => a - b)
+  return unique
 })
 
-const timelineVisible = computed(() => !!timelineFile.value)
-
-const timelinePoints = computed(() => timelineFile.value?.matchedData || [])
-
-const timelineMax = computed(() => Math.max(0, timelinePoints.value.length - 1))
+const timelineMax = computed(() => Math.max(0, timelineGlobalTimes.value.length - 1))
 
 const normalizeTimestamp = (timestamp, fallbackIndex) => {
   if (timestamp == null) return fallbackIndex
@@ -148,23 +158,19 @@ const formatTimestamp = (value) => {
   return String(value)
 }
 
-const timelineTimes = computed(() =>
-  timelinePoints.value.map((p, i) => normalizeTimestamp(p.timestamp, i))
-)
-
 const currentTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineTimes.value[timelineIndex.value])
+  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
+  return formatTimestamp(timelineGlobalTimes.value[timelineIndex.value])
 })
 
 const startTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineTimes.value[0])
+  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
+  return formatTimestamp(timelineGlobalTimes.value[0])
 })
 
 const endTimeLabel = computed(() => {
-  if (!timelineVisible.value || timelineTimes.value.length === 0) return '-'
-  return formatTimestamp(timelineTimes.value[timelineTimes.value.length - 1])
+  if (!timelineVisible.value || timelineGlobalTimes.value.length === 0) return '-'
+  return formatTimestamp(timelineGlobalTimes.value[timelineGlobalTimes.value.length - 1])
 })
 
 // --- 初始化 ---
@@ -402,14 +408,37 @@ const clearSubLayers = (fileId, types) => {
 }
 
 // --- 时间轴交互 ---
+const buildMatchedTimes = (file) =>
+  file.matchedData.map((p, i) => normalizeTimestamp(p.timestamp, i))
+
+const findIndexByTime = (times, target) => {
+  if (!times.length) return 0
+  if (target <= times[0]) return 0
+  if (target >= times[times.length - 1]) return times.length - 1
+  let left = 0
+  let right = times.length - 1
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2)
+    if (times[mid] === target) return mid
+    if (times[mid] < target) left = mid + 1
+    else right = mid - 1
+  }
+  return Math.max(0, left - 1)
+}
+
 const updateTimelineOnMap = () => {
-  if (!timelineFile.value || !mapRef.value) return
-  mapRef.value.drawMatchedTimeline(
-    timelineFile.value.id,
-    timelineFile.value.matchedData,
-    timelineIndex.value,
-    { tailLength: timelineTailLength, activeColor: '#00C853' }
-  )
+  if (!timelineVisible.value || !mapRef.value) return
+  const targetTime = timelineGlobalTimes.value[timelineIndex.value]
+  timelineFiles.value.forEach((file) => {
+    const times = buildMatchedTimes(file)
+    const index = findIndexByTime(times, targetTime)
+    mapRef.value.drawMatchedTimeline(
+      file.id,
+      file.matchedData,
+      index,
+      { tailLength: timelineTailLength, activeColor: '#00C853' }
+    )
+  })
 }
 
 const startTimelinePlayback = () => {
@@ -454,20 +483,24 @@ watch(timelineIndex, () => {
 })
 
 watch(
-  () => timelineFile.value?.id,
-  (newId, oldId) => {
+  () => timelineFiles.value.map(f => f.id),
+  (newIds, oldIds) => {
     stopTimelinePlayback()
     timelineIndex.value = 0
-    if (oldId != null) {
-      mapRef.value?.clearTimelineLayers(oldId)
-    }
-    if (newId != null) {
+    const oldSet = new Set(oldIds || [])
+    const newSet = new Set(newIds || [])
+    oldSet.forEach((id) => {
+      if (!newSet.has(id)) {
+        mapRef.value?.clearTimelineLayers(id)
+      }
+    })
+    if (timelineVisible.value) {
       updateTimelineOnMap()
     }
   }
 )
 
-watch(timelinePoints, () => {
+watch(timelineGlobalTimes, () => {
   if (timelineIndex.value > timelineMax.value) {
     timelineIndex.value = timelineMax.value
   }
