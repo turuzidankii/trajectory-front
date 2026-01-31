@@ -79,8 +79,8 @@ const drawTrajectory = (fileId, points, type, color) => {
     const latlngs = points.map((p) => [p.lat, p.lon])
     layer = L.polyline(latlngs, {
       color: color,
-      weight: 5,
-      opacity: 0.8
+      weight: 4,
+      opacity: 0.7
     })
   } else {
     layer = L.featureGroup()
@@ -108,6 +108,73 @@ const drawTrajectory = (fileId, points, type, color) => {
   }
 }
 
+const drawMatchedTimeline = (fileId, points, currentIndex, options = {}) => {
+  if (!ensureMap() || points.length === 0) return
+  if (!layerStore.value[fileId]) layerStore.value[fileId] = {}
+
+  const activeColor = options.activeColor || '#00C853'
+  const tailLength = Number.isFinite(options.tailLength) ? options.tailLength : 8
+
+  if (layerStore.value[fileId].matchedActive) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].matchedActive)
+    delete layerStore.value[fileId].matchedActive
+  }
+  if (layerStore.value[fileId].matchedMarker) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].matchedMarker)
+    delete layerStore.value[fileId].matchedMarker
+  }
+
+  const safeIndex = Math.min(Math.max(currentIndex, 0), points.length - 1)
+  const start = Math.max(0, safeIndex - tailLength)
+  const tailPoints = points.slice(start, safeIndex + 1)
+
+  if (tailPoints.length >= 2) {
+    const tailLatlngs = tailPoints.map((p) => [p.lat, p.lon])
+    layerStore.value[fileId].matchedActive = L.polyline(tailLatlngs, {
+      color: activeColor,
+      weight: 6,
+      opacity: 0.95
+    }).addTo(mapInstance.value)
+  } else if (tailPoints.length === 1) {
+    const [p] = tailPoints
+    layerStore.value[fileId].matchedActive = L.circleMarker([p.lat, p.lon], {
+      radius: 5,
+      fillColor: activeColor,
+      color: '#fff',
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.9
+    }).addTo(mapInstance.value)
+  }
+
+  const currentPoint = points[safeIndex]
+  if (currentPoint) {
+    layerStore.value[fileId].matchedMarker = L.circleMarker(
+      [currentPoint.lat, currentPoint.lon],
+      {
+        radius: 6,
+        fillColor: activeColor,
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 1
+      }
+    ).addTo(mapInstance.value)
+  }
+}
+
+const clearTimelineLayers = (fileId) => {
+  if (!layerStore.value[fileId]) return
+  if (layerStore.value[fileId].matchedActive) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].matchedActive)
+    delete layerStore.value[fileId].matchedActive
+  }
+  if (layerStore.value[fileId].matchedMarker) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].matchedMarker)
+    delete layerStore.value[fileId].matchedMarker
+  }
+}
+
 const clearSubLayers = (fileId, types) => {
   if (!layerStore.value[fileId]) return
   types.forEach((type) => {
@@ -120,12 +187,18 @@ const clearSubLayers = (fileId, types) => {
 
 const clearFileLayers = (fileId) => {
   if (!layerStore.value[fileId]) return
-  ['raw', 'processed', 'matched'].forEach((type) => {
+  ['raw', 'processed', 'matched', 'matchedActive', 'matchedMarker'].forEach((type) => {
     if (layerStore.value[fileId][type]) {
       mapInstance.value.removeLayer(layerStore.value[fileId][type])
     }
   })
   delete layerStore.value[fileId]
+}
+
+const clearAllFileLayers = () => {
+  Object.keys(layerStore.value).forEach((fileId) => {
+    clearFileLayers(fileId)
+  })
 }
 
 const fitToPoints = (points) => {
@@ -154,8 +227,11 @@ onBeforeUnmount(() => {
 
 defineExpose({
   drawTrajectory,
+  drawMatchedTimeline,
+  clearTimelineLayers,
   clearSubLayers,
   clearFileLayers,
+  clearAllFileLayers,
   clearRoadLayers,
   drawRoadSegments,
   fitToPoints
