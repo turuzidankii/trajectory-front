@@ -28,7 +28,7 @@
     <div
       style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px;"
     >
-      <span style="font-weight: bold; color: #666;">轨迹列表 ({{ fileList.length }})</span>
+      <span style="font-weight: bold; color: #666;">轨迹列表 ({{ selectedFileIds.length }} / {{ fileList.length }})</span>
       <el-button v-if="selectedFileIds.length > 0" type="text" size="small" @click="onClearSelection">
         取消全选
       </el-button>
@@ -96,16 +96,20 @@
     </div>
 
     <div v-if="selectedFileIds.length > 0" class="config-panel">
-      <el-divider content-position="left">已选 {{ selectedFileIds.length }} 项配置</el-divider>
+      <el-divider content-position="left">预处理算法</el-divider>
 
       <el-form :model="config" label-width="120px" size="small">
-        <el-form-item label="预处理算法">
+        <el-form-item label="停留点聚类算法">
           <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
-              <el-checkbox v-model="config.remove_stop_points" style="font-weight: bold;">
-                🛑 停留点聚类
+              <el-checkbox
+                :model-value="config.stop_cluster_algo === 'spatiotemporal'"
+                @change="(val) => onSelectStopCluster('spatiotemporal', val)"
+                style="font-weight: bold;"
+              >
+                🛑 基于时空阈值
               </el-checkbox>
-              <div v-if="config.remove_stop_points" style="margin-top: 5px; padding-left: 20px;">
+              <div v-if="config.stop_cluster_algo === 'spatiotemporal'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
                     <div class="mini-label">距离(m)</div>
@@ -132,10 +136,51 @@
             </div>
 
             <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
-              <el-checkbox v-model="config.enable_kalman" style="font-weight: bold;">
+              <el-checkbox
+                :model-value="config.stop_cluster_algo === 'density'"
+                @change="(val) => onSelectStopCluster('density', val)"
+                style="font-weight: bold;"
+              >
+                🧱 基于密度
+              </el-checkbox>
+              <div v-if="config.stop_cluster_algo === 'density'" style="margin-top: 5px; padding-left: 20px;">
+                <div class="mini-label">参数待定</div>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="去噪算法">
+          <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.denoise_algo === 'median'"
+                @change="(val) => onSelectDenoise('median', val)"
+                style="font-weight: bold;"
+              >
+                🧹 中值滤波
+              </el-checkbox>
+              <div v-if="config.denoise_algo === 'median'" style="margin-top: 5px; padding-left: 20px;">
+                <div class="mini-label">窗口大小</div>
+                <el-input-number
+                  v-model="config.median_window"
+                  :min="1"
+                  size="small"
+                  style="width:100%"
+                  controls-position="right"
+                />
+              </div>
+            </div>
+
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.denoise_algo === 'kalman'"
+                @change="(val) => onSelectDenoise('kalman', val)"
+                style="font-weight: bold;"
+              >
                 📉 卡尔曼滤波
               </el-checkbox>
-              <div v-if="config.enable_kalman" style="margin-top: 5px; padding-left: 20px;">
+              <div v-if="config.denoise_algo === 'kalman'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
                     <div class="mini-label">观测信任R</div>
@@ -161,6 +206,19 @@
                 </el-row>
               </div>
             </div>
+
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.denoise_algo === 'rts'"
+                @change="(val) => onSelectDenoise('rts', val)"
+                style="font-weight: bold;"
+              >
+                🧬 RTS平滑
+              </el-checkbox>
+              <div v-if="config.denoise_algo === 'rts'" style="margin-top: 5px; padding-left: 20px;">
+                <div class="mini-label">参数待定</div>
+              </div>
+            </div>
           </div>
         </el-form-item>
       </el-form>
@@ -171,6 +229,12 @@
         <el-option label="IVMM (交互式投票匹配)" value="IVMM" />
         <el-option label="Simple (最近邻吸附)" value="Simple" />
       </el-select>
+
+      <div style="margin-top: 10px;">
+        <el-checkbox v-model="config.astar_fill" style="font-weight: bold;">
+          🧭 A*算法补全
+        </el-checkbox>
+      </div>
 
       <div style="margin-top: 20px;">
         <el-button
@@ -191,7 +255,7 @@
 <script setup>
 import { getScoreType } from '../utils/score'
 
-defineProps({
+const props = defineProps({
   roadStatus: { type: Boolean, default: false },
   nodeCount: { type: Number, default: 0 },
   fileList: { type: Array, default: () => [] },
@@ -215,4 +279,22 @@ const onClearSelection = () => emit('clear-selection')
 const onDeleteFile = (id) => emit('delete-file', id)
 const onShowReport = (file) => emit('show-report', file)
 const onStartBatch = () => emit('start-batch-processing')
+
+const onSelectStopCluster = (type, checked) => {
+  if (checked) {
+    // 二选一
+    props.config.stop_cluster_algo = type
+  } else if (props.config.stop_cluster_algo === type) {
+    props.config.stop_cluster_algo = null
+  }
+}
+
+const onSelectDenoise = (type, checked) => {
+  if (checked) {
+    // 三选一
+    props.config.denoise_algo = type
+  } else if (props.config.denoise_algo === type) {
+    props.config.denoise_algo = null
+  }
+}
 </script>

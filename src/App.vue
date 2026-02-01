@@ -69,15 +69,19 @@ const timelineTailLength = 10
 
 // --- 核心配置 ---
 const config = ref({
-  remove_stop_points: false, 
-  stop_radius: 5,            
-  stop_duration: 30,         
-  
-  enable_kalman: true,       
-  kalman_R: 0.01,            
-  kalman_Q: 500,          
-  
-  match_algo: 'HMM'
+  // 停留点聚类算法
+  stop_cluster_algo: null, // 'spatiotemporal' | 'density' | null
+  stop_radius: 5,
+  stop_duration: 30,
+
+  // 去噪算法
+  denoise_algo: null, // 'median' | 'kalman' | 'rts' | null
+  median_window: 3,
+  kalman_R: 0.01,
+  kalman_Q: 500,
+
+  match_algo: 'HMM',
+  astar_fill: false
 })
 
 // --- 计算属性 ---
