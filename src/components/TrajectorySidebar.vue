@@ -4,8 +4,10 @@
 
     <div style="margin-bottom: 15px;">
       <el-tag :type="roadStatus ? 'success' : 'danger'" effect="dark" style="width: 100%;">
-        <el-icon><Location /></el-icon>
-        {{ roadStatus ? `服务端路网已就绪 (节点:${nodeCount})` : '服务端路网未加载' }}
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+          <el-icon><Location /></el-icon>
+          <span>{{ roadStatus ? `服务端路网已就绪 (节点:${nodeCount})` : '服务端路网未加载' }}</span>
+        </span>
       </el-tag>
     </div>
 
@@ -20,7 +22,7 @@
       <template #trigger>
         <el-button type="primary" style="width: 100%; font-weight: bold;">
           <el-icon style="margin-right: 5px"><Upload /></el-icon>
-          上传轨迹 (自动质检)
+          上传轨迹 
         </el-button>
       </template>
     </el-upload>
@@ -98,7 +100,7 @@
     <div v-if="selectedFileIds.length > 0" class="config-panel">
       <el-divider content-position="left">预处理算法</el-divider>
 
-      <el-form :model="config" label-width="120px" size="small">
+      <el-form :model="config" label-width="120px" label-position="top" size="small">
         <el-form-item label="停留点聚类算法">
           <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
@@ -279,20 +281,21 @@
           🧭 A*算法补全
         </el-checkbox>
       </div>
-
-      <div style="margin-top: 20px;">
-        <el-button
-          type="success"
-          size="large"
-          style="width: 100%; font-weight: bold;"
-          @click="onStartBatch"
-          :loading="loading"
-        >
-          ⚡ 批量处理 ({{ selectedFileIds.length }})
-        </el-button>
-      </div>
     </div>
-    <div v-else class="empty-tip">👈 请勾选列表中的轨迹进行处理</div>
+
+    <div style="margin-top: 20px;">
+      <el-button
+        type="success"
+        size="large"
+        style="width: 100%; font-weight: bold;"
+        @click="onStartBatch"
+        :loading="loading"
+        :disabled="selectedFileIds.length === 0"
+      >
+        <span v-if="selectedFileIds.length > 0">⚡ 批量处理 ({{ selectedFileIds.length }})</span>
+        <span v-else>未选中轨迹</span>
+      </el-button>
+    </div>
   </el-aside>
 </template>
 
@@ -342,3 +345,10 @@ const onSelectDenoise = (type, checked) => {
   }
 }
 </script>
+
+<style scoped>
+.config-panel {
+  height: 400px;
+  overflow-y: auto;
+}
+</style>
