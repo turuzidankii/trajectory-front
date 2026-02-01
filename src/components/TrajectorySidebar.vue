@@ -144,7 +144,29 @@
                 🧱 基于密度
               </el-checkbox>
               <div v-if="config.stop_cluster_algo === 'density'" style="margin-top: 5px; padding-left: 20px;">
-                <div class="mini-label">参数待定</div>
+                <el-row :gutter="10">
+                  <el-col :span="12">
+                    <div class="mini-label">邻域半径(m)</div>
+                    <el-input-number
+                      v-model="config.stop_eps_m"
+                      :min="0.1"
+                      :step="0.1"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                  <el-col :span="12">
+                    <div class="mini-label">最小样本数</div>
+                    <el-input-number
+                      v-model="config.stop_min_samples"
+                      :min="1"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                </el-row>
               </div>
             </div>
           </div>
@@ -216,7 +238,29 @@
                 🧬 RTS平滑
               </el-checkbox>
               <div v-if="config.denoise_algo === 'rts'" style="margin-top: 5px; padding-left: 20px;">
-                <div class="mini-label">参数待定</div>
+                <el-row :gutter="10">
+                  <el-col :span="12">
+                    <div class="mini-label">观测信任R</div>
+                    <el-input-number
+                      v-model="config.rts_R"
+                      :min="0.01"
+                      :step="0.01"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                  <el-col :span="12">
+                    <div class="mini-label">过程噪声Q</div>
+                    <el-input-number
+                      v-model="config.rts_Q"
+                      :min="0.1"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                </el-row>
               </div>
             </div>
           </div>

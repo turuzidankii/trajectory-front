@@ -71,14 +71,18 @@ const timelineTailLength = 10
 const config = ref({
   // 停留点聚类算法
   stop_cluster_algo: null, // 'spatiotemporal' | 'density' | null
-  stop_radius: 5,
-  stop_duration: 30,
+  stop_radius: 5.0,
+  stop_duration: 30.0,
+  stop_eps_m: 10.0,
+  stop_min_samples: 3,
 
   // 去噪算法
   denoise_algo: null, // 'median' | 'kalman' | 'rts' | null
   median_window: 3,
   kalman_R: 0.01,
   kalman_Q: 500,
+  rts_R: 0.01,
+  rts_Q: 500,
 
   match_algo: 'HMM',
   astar_fill: false
