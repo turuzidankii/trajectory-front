@@ -85,7 +85,18 @@ const config = ref({
   rts_Q: 500,
 
   match_algo: 'HMM',
-  astar_fill: false
+  astar_fill: false,
+
+  // HMM 参数
+  hmm_max_dist: 500,
+  hmm_obs_noise: 30,
+  hmm_obs_noise_ne: 50,
+  hmm_max_lattice_width: 5,
+
+  // IVMM 参数
+  ivmm_search_radius: 100,
+  ivmm_w_dist: 0.6,
+  ivmm_w_heading: 0.4
 })
 
 // --- 计算属性 ---

@@ -98,7 +98,7 @@
     </div>
 
     <div v-if="selectedFileIds.length > 0" class="config-panel">
-      <el-divider content-position="left">预处理算法</el-divider>
+      <el-divider content-position="left">数据预处理</el-divider>
 
       <el-form :model="config" label-width="120px" label-position="top" size="small">
         <el-form-item label="停留点聚类算法">
@@ -114,7 +114,9 @@
               <div v-if="config.stop_cluster_algo === 'spatiotemporal'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
-                    <div class="mini-label">距离(m)</div>
+                    <el-tooltip content="用于判断停留点的最大空间距离阈值（米）。" placement="top" :show-after="400">
+                      <div class="mini-label">距离(m)</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.stop_radius"
                       :min="1"
@@ -124,7 +126,9 @@
                     />
                   </el-col>
                   <el-col :span="12">
-                    <div class="mini-label">时间(s)</div>
+                    <el-tooltip content="用于判断停留点的最小持续时间阈值（秒）。" placement="top" :show-after="400">
+                      <div class="mini-label">时间(s)</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.stop_duration"
                       :min="0"
@@ -148,7 +152,9 @@
               <div v-if="config.stop_cluster_algo === 'density'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
-                    <div class="mini-label">邻域半径(m)</div>
+                    <el-tooltip content="密度聚类的邻域搜索半径（米）。" placement="top" :show-after="400">
+                      <div class="mini-label">邻域半径(m)</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.stop_eps_m"
                       :min="0.1"
@@ -159,7 +165,9 @@
                     />
                   </el-col>
                   <el-col :span="12">
-                    <div class="mini-label">最小样本数</div>
+                    <el-tooltip content="密度聚类形成核心点所需的最小样本数。" placement="top" :show-after="400">
+                      <div class="mini-label">最小样本数</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.stop_min_samples"
                       :min="1"
@@ -185,7 +193,9 @@
                 🧹 中值滤波
               </el-checkbox>
               <div v-if="config.denoise_algo === 'median'" style="margin-top: 5px; padding-left: 20px;">
-                <div class="mini-label">窗口大小</div>
+                <el-tooltip content="中值滤波窗口长度，越大越平滑但可能损失细节。" placement="top" :show-after="400">
+                  <div class="mini-label">窗口大小</div>
+                </el-tooltip>
                 <el-input-number
                   v-model="config.median_window"
                   :min="1"
@@ -207,7 +217,9 @@
               <div v-if="config.denoise_algo === 'kalman'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
-                    <div class="mini-label">观测信任R</div>
+                    <el-tooltip content="卡尔曼滤波观测噪声协方差 R，越大越不信任观测。" placement="top" :show-after="400">
+                      <div class="mini-label">观测信任R</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.kalman_R"
                       :min="0.01"
@@ -218,7 +230,9 @@
                     />
                   </el-col>
                   <el-col :span="12">
-                    <div class="mini-label">过程噪声Q</div>
+                    <el-tooltip content="卡尔曼滤波过程噪声协方差 Q，越大越信任模型变化。" placement="top" :show-after="400">
+                      <div class="mini-label">过程噪声Q</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.kalman_Q"
                       :min="0.1"
@@ -242,7 +256,9 @@
               <div v-if="config.denoise_algo === 'rts'" style="margin-top: 5px; padding-left: 20px;">
                 <el-row :gutter="10">
                   <el-col :span="12">
-                    <div class="mini-label">观测信任R</div>
+                    <el-tooltip content="RTS 平滑的观测噪声协方差 R。" placement="top" :show-after="400">
+                      <div class="mini-label">观测信任R</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.rts_R"
                       :min="0.01"
@@ -253,7 +269,9 @@
                     />
                   </el-col>
                   <el-col :span="12">
-                    <div class="mini-label">过程噪声Q</div>
+                    <el-tooltip content="RTS 平滑的过程噪声协方差 Q。" placement="top" :show-after="400">
+                      <div class="mini-label">过程噪声Q</div>
+                    </el-tooltip>
                     <el-input-number
                       v-model="config.rts_Q"
                       :min="0.1"
@@ -269,18 +287,105 @@
         </el-form-item>
       </el-form>
 
-      <el-divider content-position="left">匹配算法</el-divider>
-      <el-select v-model="config.match_algo" placeholder="选择算法" style="width: 100%;">
-        <el-option label="HMM (隐马尔可夫)" value="HMM" />
-        <el-option label="IVMM (交互式投票匹配)" value="IVMM" />
-        <el-option label="Simple (最近邻吸附)" value="Simple" />
-      </el-select>
+      <el-divider content-position="left">路径匹配</el-divider>
 
-      <div style="margin-top: 10px;">
-        <el-checkbox v-model="config.astar_fill" style="font-weight: bold;">
-          🧭 A*算法补全
-        </el-checkbox>
-      </div>
+      <el-form :model="config" label-width="120px" label-position="top" size="small">
+        <el-form-item label="匹配算法">
+          <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.match_algo === 'HMM'"
+                @change="(val) => onSelectMatchAlgo('HMM', val)"
+                style="font-weight: bold;"
+              >
+                🧠 HMM (隐马尔可夫)
+              </el-checkbox>
+              <div v-if="config.match_algo === 'HMM'" style="margin-top: 5px; padding-left: 20px;">
+                <el-row :gutter="10">
+                  <el-col :span="12">
+                    <el-tooltip content="HMM 匹配的最大候选距离（米）。" placement="top" :show-after="400">
+                      <div class="mini-label">最大距离</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.hmm_max_dist" :min="1" size="small" style="width:100%" />
+                  </el-col>
+                  <el-col :span="12">
+                    <el-tooltip content="HMM 观测噪声参数，控制观测误差。" placement="top" :show-after="400">
+                      <div class="mini-label">观测噪声</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.hmm_obs_noise" :min="0" size="small" style="width:100%" />
+                  </el-col>
+                  <el-col :span="12" style="margin-top: 8px;">
+                    <el-tooltip content="HMM 的 NE 方向噪声参数。" placement="top" :show-after="400">
+                      <div class="mini-label">NE噪声</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.hmm_obs_noise_ne" :min="0" size="small" style="width:100%" />
+                  </el-col>
+                  <el-col :span="12" style="margin-top: 8px;">
+                    <el-tooltip content="HMM 候选路径格网最大宽度。" placement="top" :show-after="400">
+                      <div class="mini-label">格网宽度</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.hmm_max_lattice_width" :min="1" size="small" style="width:100%" />
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
+
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.match_algo === 'IVMM'"
+                @change="(val) => onSelectMatchAlgo('IVMM', val)"
+                style="font-weight: bold;"
+              >
+                🧭 IVMM (交互式投票匹配)
+              </el-checkbox>
+              <div v-if="config.match_algo === 'IVMM'" style="margin-top: 5px; padding-left: 20px;">
+                <el-row :gutter="10">
+                  <el-col :span="12">
+                    <el-tooltip content="IVMM 的候选搜索半径（米）。" placement="top" :show-after="400">
+                      <div class="mini-label">搜索半径</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.ivmm_search_radius" :min="1" size="small" style="width:100%" />
+                  </el-col>
+                  <el-col :span="12">
+                    <el-tooltip content="IVMM 距离项权重，范围 0~1。" placement="top" :show-after="400">
+                      <div class="mini-label">距离权重</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.ivmm_w_dist" :min="0" :max="1" :step="0.1" size="small" style="width:100%" />
+                  </el-col>
+                  <el-col :span="12" style="margin-top: 8px;">
+                    <el-tooltip content="IVMM 方向项权重，范围 0~1。" placement="top" :show-after="400">
+                      <div class="mini-label">方向权重</div>
+                    </el-tooltip>
+                    <el-input-number v-model="config.ivmm_w_heading" :min="0" :max="1" :step="0.1" size="small" style="width:100%" />
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
+
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox
+                :model-value="config.match_algo === 'Simple'"
+                @change="(val) => onSelectMatchAlgo('Simple', val)"
+                style="font-weight: bold;"
+              >
+                📍 Simple (最近邻吸附)
+              </el-checkbox>
+              <div v-if="config.match_algo === 'Simple'" style="margin-top: 5px; padding-left: 20px; color: #999;">
+                无额外参数
+              </div>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="路径补全">
+          <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox v-model="config.astar_fill" style="font-weight: bold;">
+                🧭 A*路径规划
+              </el-checkbox>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
     </div>
 
     <div style="margin-top: 20px;">
@@ -342,6 +447,15 @@ const onSelectDenoise = (type, checked) => {
     props.config.denoise_algo = type
   } else if (props.config.denoise_algo === type) {
     props.config.denoise_algo = null
+  }
+}
+
+const onSelectMatchAlgo = (type, checked) => {
+  if (checked) {
+    // 三选一
+    props.config.match_algo = type
+  } else if (props.config.match_algo === type) {
+    props.config.match_algo = null
   }
 }
 </script>

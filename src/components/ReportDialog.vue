@@ -28,10 +28,10 @@
         <el-table-column prop="situation" label="状态" width="50" />
         <el-table-column prop="timestamp" label="时间戳" width="160" />
 
-        <el-table-column prop="lat" label="纬度" width="80">
+        <el-table-column prop="lat" label="纬度" width="85">
           <template #default="scope">{{ Number(scope.row.lat).toFixed(6) }}</template>
         </el-table-column>
-        <el-table-column prop="lon" label="经度" width="80">
+        <el-table-column prop="lon" label="经度" width="85">
           <template #default="scope">{{ Number(scope.row.lon).toFixed(6) }}</template>
         </el-table-column>
 
@@ -54,7 +54,23 @@
         <el-table-column prop="status" label="检测结果">
           <template #default="scope">
             <el-tag v-if="!scope.row.is_error" type="success" size="small" effect="light">✅ 正常</el-tag>
-            <el-tag v-else type="danger" size="small" effect="light">❌ {{ scope.row.status }}</el-tag>
+            <el-tooltip
+              v-else
+              :content="scope.row.status"
+              placement="top"
+              :show-after="400"
+              :disabled="!statusOverflowMap[scope.row.id]"
+            >
+              <el-tag
+                type="danger"
+                size="small"
+                effect="light"
+                class="status-tag"
+                @mouseenter="(e) => setStatusOverflow(scope.row.id, e)"
+              >
+                ❌ {{ scope.row.status }}
+              </el-tag>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -74,7 +90,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import { getScoreColor } from '../utils/score'
 
 const props = defineProps({
@@ -113,4 +129,23 @@ const pagedReportData = computed(() => {
 })
 
 const tableRowClassName = ({ row }) => (row.is_error ? 'warning-row' : '')
+
+const statusOverflowMap = reactive({})
+
+const setStatusOverflow = (id, event) => {
+  const el = event?.currentTarget
+  if (!el) return
+  statusOverflowMap[id] = el.scrollWidth > el.clientWidth
+}
 </script>
+
+<style scoped>
+.status-tag {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+</style>
