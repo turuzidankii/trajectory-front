@@ -84,7 +84,8 @@ const config = ref({
   rts_R: 0.01,
   rts_Q: 500,
 
-  match_algo: 'HMM',
+  // 路径匹配算法
+  match_algo: null, // 'hmm' | 'ivmm' | null
   astar_fill: false,
 
   // HMM 参数
@@ -165,7 +166,12 @@ const handleFileChange = async (file) => {
         time: new Date().toLocaleTimeString(),
         // 🔥 核心：存储后端返回的质检结果
         qc_summary: res.data.qc_summary || { score: 0, counts: {} },
-        qc_details: res.data.qc_details || []
+        qc_details: res.data.qc_details || [],
+        // 预处理后质检结果（批处理后更新）
+        qc_pre_summary: null,
+        qc_pre_details: [],
+        skipped_preprocess: false,
+        skipped_match: false
       }
       
       fileList.value.push(newFile)
@@ -248,10 +254,18 @@ const startBatchProcessing = async () => {
       
       file.processedData = res.data.trajectory_processed
       file.matchedData = res.data.trajectory_matched
+      file.qc_pre_summary = res.data.qc_pre_summary || null
+      file.qc_pre_details = res.data.qc_pre_details || []
+      file.skipped_preprocess = Boolean(res.data.skipped_preprocess)
+      file.skipped_match = Boolean(res.data.skipped_match)
       // 注意：这里可以选择是否用处理后的报告更新 qc_summary，目前逻辑是保留原始数据的质检报告
       
-      drawTrajectory(file.id, file.processedData, 'processed', 'blue')
-      drawTrajectory(file.id, file.matchedData, 'matched', 'green')
+      if (!file.skipped_preprocess) {
+        drawTrajectory(file.id, file.processedData, 'processed', 'blue')
+      }
+      if (!file.skipped_match) {
+        drawTrajectory(file.id, file.matchedData, 'matched', 'green')
+      }
       successCount++
     }
     ElMessage.success(`批量处理完成，共 ${successCount} 条`)
@@ -304,10 +318,10 @@ const refreshMapAndView = async () => {
     if (file.rawData?.length) {
       drawTrajectory(file.id, file.rawData, 'raw', 'red')
     }
-    if (file.processedData?.length) {
+    if (file.processedData?.length && !file.skipped_preprocess) {
       drawTrajectory(file.id, file.processedData, 'processed', 'blue')
     }
-    if (file.matchedData?.length) {
+    if (file.matchedData?.length && !file.skipped_match) {
       drawTrajectory(file.id, file.matchedData, 'matched', 'green')
     }
   })

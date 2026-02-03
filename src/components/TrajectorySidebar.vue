@@ -58,7 +58,7 @@
           <div class="file-meta">
             {{ file.count }} 点
             <span v-if="file.processedData.length" style="color: green; margin-left: 5px;">(已处理)</span>
-            <el-tag
+            <!-- <el-tag
               v-if="file.qc_summary"
               size="small"
               :type="getScoreType(file.qc_summary.score)"
@@ -66,7 +66,7 @@
               effect="plain"
             >
               {{ file.qc_summary.score }}分
-            </el-tag>
+            </el-tag> -->
           </div>
         </div>
 
@@ -395,7 +395,7 @@
         style="width: 100%; font-weight: bold;"
         @click="onStartBatch"
         :loading="loading"
-        :disabled="selectedFileIds.length === 0"
+        :disabled="selectedFileIds.length === 0 || (!config.stop_cluster_algo && !config.denoise_algo && !config.match_algo)"
       >
         <span v-if="selectedFileIds.length > 0">⚡ 批量处理 ({{ selectedFileIds.length }})</span>
         <span v-else>未选中轨迹</span>

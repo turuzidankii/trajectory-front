@@ -11,6 +11,11 @@ const mapEl = ref(null)
 const mapInstance = ref(null)
 const roadLayerGroup = ref(null)
 const layerStore = ref({})
+const visibility = ref({
+  raw: true,
+  processed: true,
+  matched: true
+})
 
 const initMap = () => {
   if (!mapEl.value) return
@@ -40,13 +45,56 @@ const addLegend = () => {
     div.innerHTML = `
       <div style="font-weight:bold;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">图例说明</div>
       <div><span style="background:#003366;width:20px;height:1px;display:inline-block;vertical-align:middle;opacity:0.6"></span> 基础路网</div>
-      <div><span style="background:red;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 原始采样点</div>
-      <div><span style="background:blue;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 预处理结果</div>
-      <div><span style="background:green;width:20px;height:5px;display:inline-block;vertical-align:middle"></span> 路径匹配</div>
+      <div class="legend-item" data-type="raw"><span style="background:red;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 原始采样点</div>
+      <div class="legend-item" data-type="processed"><span style="background:blue;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 预处理结果</div>
+      <div class="legend-item" data-type="matched"><span style="background:green;width:20px;height:5px;display:inline-block;vertical-align:middle"></span> 路径匹配</div>
     `
+    L.DomEvent.disableClickPropagation(div)
+    const items = div.querySelectorAll('.legend-item')
+    items.forEach((item) => {
+      item.classList.toggle('is-hidden', !visibility.value[item.dataset.type])
+      item.addEventListener('click', () => {
+        const type = item.dataset.type
+        const next = !visibility.value[type]
+        visibility.value[type] = next
+        item.classList.toggle('is-hidden', !next)
+        setTrajectoryVisibility(type, next)
+      })
+    })
     return div
   }
   legend.addTo(mapInstance.value)
+}
+
+const setTrajectoryVisibility = (type, visible) => {
+  if (!ensureMap()) return
+  Object.keys(layerStore.value).forEach((fileId) => {
+    const layer = layerStore.value[fileId]?.[type]
+    if (!layer) return
+    if (visible) {
+      if (!mapInstance.value.hasLayer(layer)) {
+        layer.addTo(mapInstance.value)
+      }
+    } else if (mapInstance.value.hasLayer(layer)) {
+      mapInstance.value.removeLayer(layer)
+    }
+  })
+
+  if (type === 'matched') {
+    ;['matchedActive', 'matchedMarker'].forEach((subType) => {
+      Object.keys(layerStore.value).forEach((fileId) => {
+        const layer = layerStore.value[fileId]?.[subType]
+        if (!layer) return
+        if (visible) {
+          if (!mapInstance.value.hasLayer(layer)) {
+            layer.addTo(mapInstance.value)
+          }
+        } else if (mapInstance.value.hasLayer(layer)) {
+          mapInstance.value.removeLayer(layer)
+        }
+      })
+    })
+  }
 }
 
 const ensureMap = () => mapInstance.value
@@ -100,7 +148,9 @@ const drawTrajectory = (fileId, points, type, color) => {
     })
   }
 
-  layer.addTo(mapInstance.value)
+  if (visibility.value[type] !== false) {
+    layer.addTo(mapInstance.value)
+  }
   layerStore.value[fileId][type] = layer
 
   if (type !== 'raw') {
@@ -110,6 +160,7 @@ const drawTrajectory = (fileId, points, type, color) => {
 
 const drawMatchedTimeline = (fileId, points, currentIndex, options = {}) => {
   if (!ensureMap() || points.length === 0) return
+  if (!visibility.value.matched) return
   if (!layerStore.value[fileId]) layerStore.value[fileId] = {}
 
   const activeColor = options.activeColor || '#00C853'
@@ -237,3 +288,16 @@ defineExpose({
   fitToPoints
 })
 </script>
+
+<style>
+.legend .legend-item {
+  cursor: pointer;
+  user-select: none;
+  margin-top: 4px;
+}
+
+.legend .legend-item.is-hidden {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+</style>
