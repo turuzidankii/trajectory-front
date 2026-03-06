@@ -132,6 +132,7 @@ const drawTrajectory = (fileId, points, type, color) => {
     })
   } else {
     layer = L.featureGroup()
+    const markers = []
     points.forEach((p) => {
       const marker = L.circleMarker([p.lat, p.lon], {
         radius: 4,
@@ -141,11 +142,19 @@ const drawTrajectory = (fileId, points, type, color) => {
         opacity: 1,
         fillOpacity: 0.8
       })
-      if (p.road) {
-        marker.bindPopup(`<b>${p.road}</b><br>状态: ${p.status}`)
-      }
+      marker.bindPopup(`
+        <div style="min-width:220px;line-height:1.6;">
+          <div><b>采样点详情</b></div>
+          <div>时间戳: ${p.timestamp ?? '-'}</div>
+          <div>路段: ${p.road ?? '-'}</div>
+          <div>经度: ${p.lon ?? '-'}</div>
+          <div>纬度: ${p.lat ?? '-'}</div>
+        </div>
+      `)
       layer.addLayer(marker)
+      markers.push({ marker, point: p })
     })
+    layerStore.value[fileId][`${type}Markers`] = markers
   }
 
   if (visibility.value[type] !== false) {
@@ -233,6 +242,7 @@ const clearSubLayers = (fileId, types) => {
       mapInstance.value.removeLayer(layerStore.value[fileId][type])
       delete layerStore.value[fileId][type]
     }
+    delete layerStore.value[fileId][`${type}Markers`]
   })
 }
 
@@ -243,6 +253,8 @@ const clearFileLayers = (fileId) => {
       mapInstance.value.removeLayer(layerStore.value[fileId][type])
     }
   })
+  delete layerStore.value[fileId].rawMarkers
+  delete layerStore.value[fileId].processedMarkers
   delete layerStore.value[fileId]
 }
 
@@ -250,6 +262,47 @@ const clearAllFileLayers = () => {
   Object.keys(layerStore.value).forEach((fileId) => {
     clearFileLayers(fileId)
   })
+}
+
+const showSampleDetail = (fileId, sample) => {
+  if (!ensureMap() || !sample) return
+  const lat = Number(sample.lat)
+  const lon = Number(sample.lon)
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return
+
+  const candidates = [
+    ...(layerStore.value[fileId]?.rawMarkers || []),
+    ...(layerStore.value[fileId]?.processedMarkers || [])
+  ]
+
+  const target = candidates.find(({ point }) => {
+    const pointLat = Number(point?.lat)
+    const pointLon = Number(point?.lon)
+    if (!Number.isFinite(pointLat) || !Number.isFinite(pointLon)) return false
+    return Math.abs(pointLat - lat) < 1e-8 && Math.abs(pointLon - lon) < 1e-8
+  })
+
+  const popupContent = `
+    <div style="min-width:220px;line-height:1.6;">
+      <div><b>采样点详情</b></div>
+      <div>时间戳: ${sample.timestamp ?? '-'}</div>
+      <div>路段: ${sample.road ?? '-'}</div>
+      <div>经度: ${lon}</div>
+      <div>纬度: ${lat}</div>
+    </div>
+  `
+
+  if (target?.marker) {
+    target.marker.bindPopup(popupContent)
+    target.marker.openPopup()
+  } else {
+    L.popup()
+      .setLatLng([lat, lon])
+      .setContent(popupContent)
+      .openOn(mapInstance.value)
+  }
+
+  mapInstance.value.panTo([lat, lon])
 }
 
 const fitToPoints = (points) => {
@@ -285,7 +338,8 @@ defineExpose({
   clearAllFileLayers,
   clearRoadLayers,
   drawRoadSegments,
-  fitToPoints
+  fitToPoints,
+  showSampleDetail
 })
 </script>
 

@@ -36,6 +36,7 @@
         stripe
         size="small"
         :row-class-name="tableRowClassName"
+        @row-dblclick="handleRowDblClick"
       >
         <el-table-column prop="id" label="序号" width="50" align="center" />
         <el-table-column prop="road" label="路段" width="100" />
@@ -59,7 +60,7 @@
 
         <el-table-column prop="angle_diff" label="转角 (°)" width="60" align="center">
           <template #default="scope">
-            <span :class="{ 'text-warning': scope.row.angle_diff > 60 }">
+            <span>
               {{ scope.row.angle_diff }}
             </span>
           </template>
@@ -116,7 +117,7 @@ const props = defineProps({
   reportPageSize: { type: Number, default: 50 }
 })
 
-const emit = defineEmits(['update:modelValue', 'update:reportPage', 'update:reportPageSize'])
+const emit = defineEmits(['update:modelValue', 'update:reportPage', 'update:reportPageSize', 'row-dblclick'])
 
 const dialogVisible = computed({
   get: () => props.modelValue,
@@ -174,6 +175,10 @@ const setStatusOverflow = (id, event) => {
   const el = event?.currentTarget
   if (!el) return
   statusOverflowMap[id] = el.scrollWidth > el.clientWidth
+}
+
+const handleRowDblClick = (row) => {
+  emit('row-dblclick', row)
 }
 </script>
 

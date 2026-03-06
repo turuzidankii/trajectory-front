@@ -32,6 +32,7 @@
       :current-report-file="currentReportFile"
       v-model:report-page="reportPage"
       v-model:report-page-size="reportPageSize"
+      @row-dblclick="handleReportRowDblClick"
     />
 
   </div>
@@ -69,6 +70,11 @@ const timelineTailLength = 10
 
 // --- 核心配置 ---
 const config = ref({
+  // 采样点插值
+  interp_enabled: false,
+  interp_mode: 'linear', // 'linear' | 'road_network'
+  interp_max_distance_m: 100,
+
   // 停留点聚类算法
   stop_cluster_algo: null, // 'spatiotemporal' | 'density' | null
   stop_radius: 5.0,
@@ -97,7 +103,13 @@ const config = ref({
   // IVMM 参数
   ivmm_search_radius: 100,
   ivmm_w_dist: 0.6,
-  ivmm_w_heading: 0.4
+  ivmm_w_heading: 0.4,
+  ivmm_w_transition: 0.5,
+
+  // STMM 参数
+  stmm_search_radius: 100,
+  stmm_w_dist: 0.7,
+  stmm_w_transition: 0.3
 })
 
 // --- 计算属性 ---
@@ -170,6 +182,9 @@ const handleFileChange = async (file) => {
         // 预处理后质检结果（批处理后更新）
         qc_pre_summary: null,
         qc_pre_details: [],
+        // 路径匹配后质检结果（批处理后更新）
+        qc_post_summary: null,
+        qc_post_details: [],
         skipped_preprocess: false,
         skipped_match: false
       }
@@ -193,6 +208,12 @@ const showReport = (file) => {
     currentReportFile.value = file
     reportPage.value = 1 // 重置到第一页
     reportDialogVisible.value = true
+}
+
+const handleReportRowDblClick = (row) => {
+  if (!currentReportFile.value || !row) return
+  reportDialogVisible.value = false
+  mapRef.value?.showSampleDetail(currentReportFile.value.id, row)
 }
 
 // --- 文件选择与操作 ---
@@ -256,6 +277,8 @@ const startBatchProcessing = async () => {
       file.matchedData = res.data.trajectory_matched
       file.qc_pre_summary = res.data.qc_pre_summary || null
       file.qc_pre_details = res.data.qc_pre_details || []
+      file.qc_post_summary = res.data.qc_post_summary || null
+      file.qc_post_details = res.data.qc_post_details || []
       file.skipped_preprocess = Boolean(res.data.skipped_preprocess)
       file.skipped_match = Boolean(res.data.skipped_match)
       // 注意：这里可以选择是否用处理后的报告更新 qc_summary，目前逻辑是保留原始数据的质检报告
