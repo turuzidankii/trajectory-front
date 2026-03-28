@@ -136,16 +136,32 @@
               </el-checkbox>
               <div v-if="config.interp_enabled && config.interp_mode === 'road_network'" class="algo-desc">在路网约束下对长间隔采样点进行插值，提升轨迹连贯性。</div>
               <div v-if="config.interp_enabled && config.interp_mode === 'road_network'" style="margin-top: 5px; padding-left: 20px;">
-                <el-tooltip content="当相邻点间距超过该阈值时触发插值。" placement="top" :show-after="400">
-                  <div class="mini-label">最大间距阈值(m)</div>
-                </el-tooltip>
-                <el-input-number
-                  v-model="config.interp_max_distance_m"
-                  :min="1"
-                  size="small"
-                  style="width:100%"
-                  controls-position="right"
-                />
+                <el-row :gutter="10">
+                  <el-col :span="12">
+                    <el-tooltip content="当相邻点间距超过该阈值时触发插值。" placement="top" :show-after="400">
+                      <div class="mini-label">最大间距阈值(m)</div>
+                    </el-tooltip>
+                    <el-input-number
+                      v-model="config.interp_max_distance_m"
+                      :min="1"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                  <el-col :span="12">
+                    <el-tooltip content="每个轨迹点搜索附近候选路段的半径（米）。" placement="top" :show-after="400">
+                      <div class="mini-label">候选路段搜索半径(m)</div>
+                    </el-tooltip>
+                    <el-input-number
+                      v-model="config.interp_road_candidate_radius_m"
+                      :min="1"
+                      size="small"
+                      style="width:100%"
+                      controls-position="right"
+                    />
+                  </el-col>
+                </el-row>
               </div>
             </div>
           </div>
@@ -345,7 +361,7 @@
       <el-divider content-position="left">路径匹配</el-divider>
 
       <el-form :model="config" label-width="120px" label-position="top" size="small">
-        <el-form-item>
+        <el-form-item label="匹配算法">
           <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
               <el-checkbox
@@ -470,6 +486,16 @@
             </div>
           </div>
         </el-form-item>
+        <el-form-item label="匹配结果选项">
+          <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+              <el-checkbox v-model="config.enable_mapping" style="font-weight: bold;">
+                显示映射关系
+              </el-checkbox>
+              <div v-if="config.enable_mapping" class="algo-desc">根据 raw_index 用褐色细虚线连接原始点与匹配点，支持一对一与一对多关系展示。</div>
+            </div>
+          </div>
+        </el-form-item>
         <!-- <el-form-item label="路径补全">
           <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px;">
@@ -499,8 +525,6 @@
 </template>
 
 <script setup>
-import { getScoreType } from '../utils/score'
-
 const props = defineProps({
   roadStatus: { type: Boolean, default: false },
   nodeCount: { type: Number, default: 0 },

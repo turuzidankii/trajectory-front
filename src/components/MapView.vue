@@ -9,19 +9,25 @@ import 'leaflet/dist/leaflet.css'
 
 const mapEl = ref(null)
 const mapInstance = ref(null)
+const baseTileLayer = ref(null)
 const roadLayerGroup = ref(null)
+const legendEl = ref(null)
 const layerStore = ref({})
 const visibility = ref({
+  basemap: true,
+  road: true,
   raw: true,
   processed: true,
-  matched: true
+  matched: true,
+  matchedPoints: false,
+  mapping: true
 })
 
 const initMap = () => {
   if (!mapEl.value) return
   mapInstance.value = L.map(mapEl.value).setView([39.9, 116.4], 11)
 
-  L.tileLayer(
+  baseTileLayer.value = L.tileLayer(
     'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
     {
       subdomains: ['1', '2', '3', '4'],
@@ -44,11 +50,15 @@ const addLegend = () => {
       'background: white; padding: 10px; border-radius: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.1); font-size: 12px;'
     div.innerHTML = `
       <div style="font-weight:bold;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">图例说明</div>
-      <div><span style="background:#003366;width:20px;height:1px;display:inline-block;vertical-align:middle;opacity:0.6"></span> 基础路网</div>
+      <div class="legend-item" data-type="basemap"><span style="background:#d6e4ff;width:12px;height:12px;border:1px solid #7f8c8d;display:inline-block;vertical-align:middle"></span> 底图</div>
+      <div class="legend-item" data-type="road"><span style="background:#003366;width:20px;height:1px;display:inline-block;vertical-align:middle;opacity:0.6"></span> 基础路网</div>
       <div class="legend-item" data-type="raw"><span style="background:red;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 原始采样点</div>
       <div class="legend-item" data-type="processed"><span style="background:blue;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 预处理结果</div>
-      <div class="legend-item" data-type="matched"><span style="background:green;width:20px;height:5px;display:inline-block;vertical-align:middle"></span> 路径匹配</div>
+      <div class="legend-item" data-type="matched"><span style="background:green;width:20px;height:5px;display:inline-block;vertical-align:middle"></span> 匹配线</div>
+      <div class="legend-item" data-type="matchedPoints"><span style="background:green;width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle"></span> 匹配点</div>
+      <div class="legend-item" data-type="mapping"><span style="width:20px;height:1px;border-top:1.5px dashed #8B5A2B;display:inline-block;vertical-align:middle"></span> 映射关系</div>
     `
+    legendEl.value = div
     L.DomEvent.disableClickPropagation(div)
     const items = div.querySelectorAll('.legend-item')
     items.forEach((item) => {
@@ -58,12 +68,40 @@ const addLegend = () => {
         const next = !visibility.value[type]
         visibility.value[type] = next
         item.classList.toggle('is-hidden', !next)
-        setTrajectoryVisibility(type, next)
+        if (type === 'basemap') {
+          setBasemapVisibility(next)
+        } else if (type === 'road') {
+          setRoadVisibility(next)
+        } else {
+          setTrajectoryVisibility(type, next)
+        }
       })
     })
     return div
   }
   legend.addTo(mapInstance.value)
+}
+
+const setBasemapVisibility = (visible) => {
+  if (!ensureMap() || !baseTileLayer.value) return
+  if (visible) {
+    if (!mapInstance.value.hasLayer(baseTileLayer.value)) {
+      baseTileLayer.value.addTo(mapInstance.value)
+    }
+  } else if (mapInstance.value.hasLayer(baseTileLayer.value)) {
+    mapInstance.value.removeLayer(baseTileLayer.value)
+  }
+}
+
+const setRoadVisibility = (visible) => {
+  if (!ensureMap() || !roadLayerGroup.value) return
+  if (visible) {
+    if (!mapInstance.value.hasLayer(roadLayerGroup.value)) {
+      roadLayerGroup.value.addTo(mapInstance.value)
+    }
+  } else if (mapInstance.value.hasLayer(roadLayerGroup.value)) {
+    mapInstance.value.removeLayer(roadLayerGroup.value)
+  }
 }
 
 const setTrajectoryVisibility = (type, visible) => {
@@ -99,6 +137,15 @@ const setTrajectoryVisibility = (type, visible) => {
 
 const ensureMap = () => mapInstance.value
 
+const refreshLegendState = () => {
+  if (!legendEl.value) return
+  const items = legendEl.value.querySelectorAll('.legend-item')
+  items.forEach((item) => {
+    const type = item.dataset.type
+    item.classList.toggle('is-hidden', !visibility.value[type])
+  })
+}
+
 const clearRoadLayers = () => {
   if (roadLayerGroup.value) roadLayerGroup.value.clearLayers()
 }
@@ -112,6 +159,10 @@ const drawRoadSegments = (segments) => {
     opacity: 0.5,
     interactive: false
   }).addTo(roadLayerGroup.value)
+
+  if (visibility.value.road === false) {
+    setRoadVisibility(false)
+  }
 }
 
 const drawTrajectory = (fileId, points, type, color) => {
@@ -121,15 +172,49 @@ const drawTrajectory = (fileId, points, type, color) => {
   if (layerStore.value[fileId][type]) {
     mapInstance.value.removeLayer(layerStore.value[fileId][type])
   }
+  if (type === 'matched' && layerStore.value[fileId].matchedPoints) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].matchedPoints)
+    delete layerStore.value[fileId].matchedPoints
+  }
 
   let layer
   if (type === 'matched') {
     const latlngs = points.map((p) => [p.lat, p.lon])
     layer = L.polyline(latlngs, {
-      color: color,
+      color,
       weight: 4,
       opacity: 0.7
     })
+
+    const pointLayer = L.featureGroup()
+    const markers = []
+    points.forEach((p) => {
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: 4,
+        fillColor: color,
+        color: '#fff',
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      })
+      marker.bindPopup(`
+        <div style="min-width:220px;line-height:1.6;">
+          <div><b>采样点详情</b></div>
+          <div>时间戳: ${p.timestamp ?? '-'}</div>
+          <div>路段: ${p.road ?? '-'}</div>
+          <div>经度: ${p.lon ?? '-'}</div>
+          <div>纬度: ${p.lat ?? '-'}</div>
+        </div>
+      `)
+      pointLayer.addLayer(marker)
+      markers.push({ marker, point: p })
+    })
+
+    if (visibility.value.matchedPoints !== false) {
+      pointLayer.addTo(mapInstance.value)
+    }
+    layerStore.value[fileId].matchedPoints = pointLayer
+    layerStore.value[fileId].matchedMarkers = markers
   } else {
     layer = L.featureGroup()
     const markers = []
@@ -223,6 +308,76 @@ const drawMatchedTimeline = (fileId, points, currentIndex, options = {}) => {
   }
 }
 
+const drawMappingRelations = (fileId, matchedPoints, rawPoints = []) => {
+  if (!ensureMap()) return
+  if (!layerStore.value[fileId]) layerStore.value[fileId] = {}
+
+  if (layerStore.value[fileId].mapping) {
+    mapInstance.value.removeLayer(layerStore.value[fileId].mapping)
+    delete layerStore.value[fileId].mapping
+  }
+
+  if (!Array.isArray(matchedPoints) || matchedPoints.length === 0) return
+
+  const rawMap = new Map()
+  if (Array.isArray(rawPoints)) {
+    rawPoints.forEach((p, index) => {
+      rawMap.set(index, p)
+    })
+  }
+
+  const mappingLayer = L.featureGroup()
+  matchedPoints.forEach((point) => {
+    const matchedLat = Number(point?.lat)
+    const matchedLon = Number(point?.lon)
+    if (!Number.isFinite(matchedLat) || !Number.isFinite(matchedLon)) return
+
+    let rawLat = Number(point?.raw_lat)
+    let rawLon = Number(point?.raw_lon)
+    const rawIndex = Number(point?.raw_index)
+
+    if ((!Number.isFinite(rawLat) || !Number.isFinite(rawLon)) && Number.isFinite(rawIndex)) {
+      const rawPoint = rawMap.get(Math.trunc(rawIndex))
+      rawLat = Number(rawPoint?.lat)
+      rawLon = Number(rawPoint?.lon)
+    }
+
+    if (!Number.isFinite(rawLat) || !Number.isFinite(rawLon)) return
+    if (rawLat === matchedLat && rawLon === matchedLon) return
+
+    const line = L.polyline(
+      [
+        [rawLat, rawLon],
+        [matchedLat, matchedLon]
+      ],
+      {
+        color: '#8B5A2B',
+        weight: 1.5,
+        opacity: 0.85,
+        dashArray: '4 4'
+      }
+    )
+
+    line.bindPopup(`
+      <div style="min-width:220px;line-height:1.6;">
+        <div><b>映射关系</b></div>
+        <div>raw_index: ${point?.raw_index ?? '-'}</div>
+        <div>timestamp: ${point?.timestamp ?? '-'}</div>
+        <div>原始点: (${rawLat}, ${rawLon})</div>
+        <div>匹配点: (${matchedLat}, ${matchedLon})</div>
+      </div>
+    `)
+    mappingLayer.addLayer(line)
+  })
+
+  if (mappingLayer.getLayers().length === 0) return
+
+  if (visibility.value.mapping !== false) {
+    mappingLayer.addTo(mapInstance.value)
+  }
+  layerStore.value[fileId].mapping = mappingLayer
+}
+
 const clearTimelineLayers = (fileId) => {
   if (!layerStore.value[fileId]) return
   if (layerStore.value[fileId].matchedActive) {
@@ -242,20 +397,43 @@ const clearSubLayers = (fileId, types) => {
       mapInstance.value.removeLayer(layerStore.value[fileId][type])
       delete layerStore.value[fileId][type]
     }
+    if (type === 'matched' && layerStore.value[fileId].matchedPoints) {
+      mapInstance.value.removeLayer(layerStore.value[fileId].matchedPoints)
+      delete layerStore.value[fileId].matchedPoints
+    }
     delete layerStore.value[fileId][`${type}Markers`]
   })
 }
 
 const clearFileLayers = (fileId) => {
   if (!layerStore.value[fileId]) return
-  ['raw', 'processed', 'matched', 'matchedActive', 'matchedMarker'].forEach((type) => {
+  ['raw', 'processed', 'matched', 'matchedPoints', 'mapping', 'matchedActive', 'matchedMarker'].forEach((type) => {
     if (layerStore.value[fileId][type]) {
       mapInstance.value.removeLayer(layerStore.value[fileId][type])
     }
   })
   delete layerStore.value[fileId].rawMarkers
   delete layerStore.value[fileId].processedMarkers
+  delete layerStore.value[fileId].matchedMarkers
   delete layerStore.value[fileId]
+}
+
+const setLayerVisibility = (type, visible) => {
+  if (type === 'basemap') {
+    visibility.value.basemap = visible
+    setBasemapVisibility(visible)
+    refreshLegendState()
+    return
+  }
+  if (type === 'road') {
+    visibility.value.road = visible
+    setRoadVisibility(visible)
+    refreshLegendState()
+    return
+  }
+  visibility.value[type] = visible
+  setTrajectoryVisibility(type, visible)
+  refreshLegendState()
 }
 
 const clearAllFileLayers = () => {
@@ -272,7 +450,8 @@ const showSampleDetail = (fileId, sample) => {
 
   const candidates = [
     ...(layerStore.value[fileId]?.rawMarkers || []),
-    ...(layerStore.value[fileId]?.processedMarkers || [])
+    ...(layerStore.value[fileId]?.processedMarkers || []),
+    ...(layerStore.value[fileId]?.matchedMarkers || [])
   ]
 
   const target = candidates.find(({ point }) => {
@@ -326,12 +505,15 @@ onBeforeUnmount(() => {
   if (mapInstance.value) {
     mapInstance.value.remove()
     mapInstance.value = null
+    baseTileLayer.value = null
   }
 })
 
 defineExpose({
   drawTrajectory,
+  drawMappingRelations,
   drawMatchedTimeline,
+  setLayerVisibility,
   clearTimelineLayers,
   clearSubLayers,
   clearFileLayers,

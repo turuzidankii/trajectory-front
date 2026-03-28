@@ -74,6 +74,7 @@ const config = ref({
   interp_enabled: false,
   interp_mode: 'linear', // 'linear' | 'road_network'
   interp_max_distance_m: 100,
+  interp_road_candidate_radius_m: 50,
 
   // 停留点聚类算法
   stop_cluster_algo: null, // 'spatiotemporal' | 'density' | null
@@ -92,6 +93,7 @@ const config = ref({
 
   // 路径匹配算法
   match_algo: null, // 'hmm' | 'ivmm' | null
+  enable_mapping: false,
   astar_fill: false,
 
   // HMM 参数
@@ -186,7 +188,8 @@ const handleFileChange = async (file) => {
         qc_post_summary: null,
         qc_post_details: [],
         skipped_preprocess: false,
-        skipped_match: false
+        skipped_match: false,
+        mapping_ready: false
       }
       
       fileList.value.push(newFile)
@@ -266,7 +269,7 @@ const startBatchProcessing = async () => {
   
   try {
     for (const file of targets) {
-      clearSubLayers(file.id, ['processed', 'matched'])
+      clearSubLayers(file.id, ['processed', 'matched', 'mapping'])
       
       const res = await processTrajectory({
         trajectory: file.rawData,
@@ -281,6 +284,7 @@ const startBatchProcessing = async () => {
       file.qc_post_details = res.data.qc_post_details || []
       file.skipped_preprocess = Boolean(res.data.skipped_preprocess)
       file.skipped_match = Boolean(res.data.skipped_match)
+      file.mapping_ready = Boolean(config.value.enable_mapping && !file.skipped_match)
       // 注意：这里可以选择是否用处理后的报告更新 qc_summary，目前逻辑是保留原始数据的质检报告
       
       if (!file.skipped_preprocess) {
@@ -288,9 +292,14 @@ const startBatchProcessing = async () => {
       }
       if (!file.skipped_match) {
         drawTrajectory(file.id, file.matchedData, 'matched', 'green')
+        if (file.mapping_ready && config.value.enable_mapping) {
+          drawMappingRelations(file.id, file.matchedData, file.rawData)
+        }
       }
       successCount++
     }
+
+    mapRef.value?.setLayerVisibility('matchedPoints', Boolean(config.value.enable_mapping))
     ElMessage.success(`批量处理完成，共 ${successCount} 条`)
   } catch (e) {
     ElMessage.error('处理过程中断')
@@ -346,6 +355,9 @@ const refreshMapAndView = async () => {
     }
     if (file.matchedData?.length && !file.skipped_match) {
       drawTrajectory(file.id, file.matchedData, 'matched', 'green')
+      if (file.mapping_ready && config.value.enable_mapping) {
+        drawMappingRelations(file.id, file.matchedData, file.rawData)
+      }
     }
   })
 }
@@ -373,6 +385,10 @@ const drawTrajectory = (fileId, points, type, color) => {
 
 const clearSubLayers = (fileId, types) => {
   mapRef.value?.clearSubLayers(fileId, types)
+}
+
+const drawMappingRelations = (fileId, matchedPoints, rawPoints) => {
+  mapRef.value?.drawMappingRelations(fileId, matchedPoints, rawPoints)
 }
 
 // --- 时间轴渲染 ---
